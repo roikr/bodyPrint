@@ -31,7 +31,8 @@ class ofApp : public ofBaseApp{
     ofxPanel gui;
     
     ofParameter<int> pointSize;
-    ofParameter<float>minEdge0,maxEdge0,minEdge1,maxEdge1,nearClipping,farClipping;
+    ofParameter<float> gridScale,depthScale;
+    ofParameter<float>minEdge0,maxEdge0,minEdge1,maxEdge1;
     ofParameter<string> fps;
     ofParameter<ofVec3f> sceneRotation,position,cameraRotation;
     
