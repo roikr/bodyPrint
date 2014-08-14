@@ -2,7 +2,7 @@
 #include "Shaders.h"
 
 #define STRINGIFY(A) #A
-#define MAX_POSITION 100000.0
+#define MAX_POSITION 1000.0
 
 
 
@@ -15,7 +15,8 @@ void ofApp::setup(){
     gui.setup("panel");
     gui.add(fps.set("fps",""));
     gui.add(pointSize.set("pointSize", 3, 1, 10));
-    gui.add(gridScale.set("gridScale", 1.0, -5.0, 5.0)); // ( -1 for linux64)
+    gui.add(gridScale.set("gridScale", -2.0, -5.0, 5.0)); // ( -1 for linux64)
+    gui.add(gridOffset.set("gridOffset", -1.0, -1.0, 1.0)); // ( -1 for linux64)
     gui.add(minEdge0.set("minEdge0", 0.0, 0.0, 1.0));
     gui.add(maxEdge0.set("maxEdge0", 1.0, 0.0, 1.0));
     gui.add(depthScale.set("depthScale", -5, -10.0, 0.0)); // 10^-5
@@ -52,13 +53,12 @@ void ofApp::updateMesh() {
     
     int minE = minEdge0*USHRT_MAX;
     int maxE = maxEdge0*USHRT_MAX;
-    float scale = pow(10, gridScale);
     
     for(int iy = 0; iy < rows; iy++) {
         for(int ix = 0; ix < columns; ix++) {
             short unsigned int depth = cam.getDepth()[iy*columns+ix];
             if (depth && depth> minE && depth<maxE) {
-                mesh.addVertex(cam.getWorldCoordinateAt(scale*ix, scale*iy, depth));
+                mesh.addVertex(cam.getWorldCoordinateAt(ix, iy, depth));
                 
             }
             
@@ -66,16 +66,16 @@ void ofApp::updateMesh() {
         }
     }
     
-    
-//    int iy=220;
-//    int ix=300;
-//    short unsigned int depth = cam.getDepth()[iy*columns+ix];
-//    if (depth ) {
-//        ofVec3f m(ix,iy,depth);
-//        ofVec3f p(cam.getWorldCoordinateAt(ix,iy , depth));
-//        cout << m << "\t" << p << endl;
-//    }
-    
+    /*
+    int iy=220;
+    int ix=300;
+    short unsigned int depth = cam.getDepth()[iy*columns+ix];
+    if (depth ) {
+        ofVec3f m(ix,iy,depth);
+        ofVec3f p(cam.getWorldCoordinateAt(ix,iy , depth));
+        cout << m << "\t" << p*scale << endl;
+    }
+    */
     
 }
 
@@ -109,7 +109,9 @@ void ofApp::draw(){
         depthTex.draw(0, 0);
     }
     
-    
+    float scale = pow(10, gridScale);
+    float offset = pow(10, gridOffset);
+
     ofPushMatrix();
 
     
@@ -120,6 +122,7 @@ void ofApp::draw(){
 	ofRotateX(cameraRotation->x);
 	ofRotateY(cameraRotation->y);
 	ofRotateZ(cameraRotation->z);
+    ofScale(scale,scale,scale*offset);
     glPointSize(pointSize);
     ofEnableDepthTest();
 
