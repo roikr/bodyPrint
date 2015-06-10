@@ -54,17 +54,32 @@ void ofApp::updateMesh() {
     int minE = minEdge0*USHRT_MAX;
     int maxE = maxEdge0*USHRT_MAX;
     
+    int minD=USHRT_MAX;
+    ofVec3f minPos(0);
+    ofVec3f minPosAlt(0);
+    
     for(int iy = 0; iy < rows; iy++) {
         for(int ix = 0; ix < columns; ix++) {
             short unsigned int depth = cam.getDepth()[iy*columns+ix];
+            
+            
+            ofVec3f pos = cam.getWorldCoordinateAt(ix, iy, depth);
+            ofVec3f pos2 = cam.getWorldCoordinateAlt(ix, iy, depth);
             if (depth && depth> minE && depth<maxE) {
-                mesh.addVertex(cam.getWorldCoordinateAt(ix, iy, depth));
+                
+                mesh.addVertex(pos2);
                 
             }
             
+            if (depth && depth<minD) {
+                minD = depth;
+                minPos = pos;
+                minPosAlt = pos2;
+            }
             
         }
     }
+    cout << minD << '\t' << minPos << endl << '\t' << minPosAlt << endl;
     
     /*
     int iy=220;
