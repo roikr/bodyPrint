@@ -13,5 +13,5 @@ ICON_FILE_PATH = $(OF_PATH)/libs/openFrameworksCompiled/project/osx/
 //IF YOU WANT AN APP TO HAVE A CUSTOM ICON - PUT THEM IN YOUR DATA FOLDER AND CHANGE ICON_FILE_PATH to:
 //ICON_FILE_PATH = bin/data/
 
-OTHER_LDFLAGS = $(OF_CORE_LIBS) "$(OF_PATH)/addons/ofxOpenNI2/libs/openni2/lib/osx/libOpenNI2.dylib"
-HEADER_SEARCH_PATHS = $(OF_CORE_HEADERS)
+OTHER_LDFLAGS = $(OF_CORE_LIBS) "/usr/local/lib/ni2/libOpenNI2.dylib"
+HEADER_SEARCH_PATHS = $(OF_CORE_HEADERS) "/usr/local/include/ni2"
