@@ -11,3 +11,6 @@ endif
 
 # call the project makefile!
 include $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk
+
+override CFLAGS += -I/usr/include/openni2
+override LDFLAGS += -L/usr/lib/i386-linux-gnu -lusb-1.0
