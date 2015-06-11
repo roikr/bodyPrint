@@ -3,11 +3,13 @@
 
 #define STRINGIFY(A) #A
 #define POINT_CLOUD_SCALE 500.0
+#define SHADER_DEPTH_SCALE 0.5/POINT_CLOUD_SCALE
 
 
 enum {
     STATE_CAMERA,
-    STATE_CLOUD,
+    STATE_POINT_PICKING,
+    STATE_CLOUD_ROTATION,
     STATE_SCREEN
 };
 
@@ -23,7 +25,6 @@ void ofApp::setup(){
     gui.add(pointSize.set("pointSize", 1, 1, 10));
     gui.add(minEdge0.set("minEdge0", 0.0, 0.0, 1.0));
     gui.add(maxEdge0.set("maxEdge0", 1.0, 0.0, 1.0));
-    gui.add(depthScale.set("depthScale", 0, -10.0, 0.0)); // 
     gui.add(minEdge1.set("minEdge1", 0.0, 0.0, 1.0));
     gui.add(maxEdge1.set("maxEdge1", 1.0, 0.0, 1.0));
 //    gui.add(nearClipping.set("nearClipping", 0, 0, MAX_POSITION));
@@ -101,15 +102,15 @@ void ofApp::draw(){
 //    ofSetupScreenOrtho(1024,768,-nearClipping,-farClipping);
     ofBackground(0);
     ofSetColor(255);
+    
+    depthTex.draw(0, 0);
+    
     if (bUseShader) {
         cloudShader.begin();
         cloudShader.setUniform1f("minEdge", minEdge1);
         cloudShader.setUniform1f("maxEdge",maxEdge1);
-        cloudShader.setUniform1f("scale",pow(10,depthScale));
-        depthTex.draw(0, 0);
-        cloudShader.end();
-    } else {
-        depthTex.draw(0, 0);
+        cloudShader.setUniform1f("scale",1.0/POINT_CLOUD_SCALE);
+        
     }
     
     easy.begin();
@@ -126,11 +127,16 @@ void ofApp::draw(){
 //    cout << mat.getTranslation() << endl;
     easy.end();
     
+    if (bUseShader) {
+        cloudShader.end();
+        
+    }
+    
    
     //    ofSetupScreen();
     gui.draw();
     
-    if (state==STATE_CLOUD) {
+    if (state==STATE_POINT_PICKING && ofGetMousePressed()) {
     
         int n = mesh.getNumVertices();
         float nearestDistance = 0;
@@ -162,14 +168,13 @@ void ofApp::draw(){
         ofVec2f offset(10, -10);
         ofDrawBitmapStringHighlight(ofToString(nearestIndex), mouse + offset);
         
-        
-        if (ofGetMousePressed()) {
-            ofSetColor(ofColor::red);
-            ofSetLineWidth(2);
-            ofCircle(easy.worldToScreen(pivot), 4);
-            ofSetLineWidth(1);
-        }
     }
+    
+    ofNoFill();
+    ofSetColor(ofColor::red);
+    ofSetLineWidth(2);
+    ofCircle(easy.worldToScreen(tempMarker), 4);
+    ofSetLineWidth(1);
 }
 
 void ofApp::exit() {
@@ -178,22 +183,18 @@ void ofApp::exit() {
 
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
+    
     switch (key) {
-        case ' ':
-            state=(state+1)%2;
-            switch (state) {
-                case STATE_CAMERA:
-                    easy.enableMouseInput();
-                    break;
-                case STATE_CLOUD:
-                case STATE_SCREEN:
-                    easy.disableMouseInput();
-                    break;
-                    
-                default:
-                    break;
-            }
+        case 'c':
+            state = STATE_CAMERA;
             break;
+        case 'p':
+            state = STATE_POINT_PICKING;
+            break;
+        case 'r':
+            state = STATE_CLOUD_ROTATION;
+            break;
+        
         case 's':
             bUseShader =!bUseShader;
             break;
@@ -207,6 +208,12 @@ void ofApp::keyPressed(int key){
             break;
         default:
             break;
+    }
+    
+    if (state==STATE_CAMERA) {
+        easy.enableMouseInput();
+    } else {
+        easy.disableMouseInput();
     }
     
 }
@@ -225,7 +232,7 @@ void ofApp::mouseMoved(int x, int y ){
 void ofApp::mouseDragged(int x, int y, int button){
     
     switch (state) {
-        case STATE_CLOUD:
+        case STATE_CLOUD_ROTATION:
             
             
             xform = ofMatrix4x4::newTranslationMatrix(-pivot);
@@ -244,7 +251,7 @@ void ofApp::mousePressed(int x, int y, int button){
     downPos = ofVec2f(x,y);
     
     
-    if (state==STATE_CLOUD) {
+    if (state==STATE_CLOUD_ROTATION) {
         cform = xform;
         pivot = tempMarker;
     }
