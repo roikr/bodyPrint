@@ -23,7 +23,7 @@ void ofApp::setup(){
     gui.add(pointSize.set("pointSize", 1, 1, 10));
     gui.add(minEdge0.set("minEdge0", 0.0, 0.0, 1.0));
     gui.add(maxEdge0.set("maxEdge0", 1.0, 0.0, 1.0));
-    gui.add(position.set("position",-0.01));
+    gui.add(position.set("position",-0.01,-10,10));
     gui.add(depthScale.set("depthScale", 0, -5.0, 5.0)); // 10^-5
     gui.add(minEdge1.set("minEdge1", 0.0, 0.0, 1.0));
     gui.add(maxEdge1.set("maxEdge1", 1.0, 0.0, 1.0));
@@ -172,14 +172,14 @@ void ofApp::exit() {
     depthCam.exit();
 }
 
-void ofApp::saveScreenMatrix() {
+void ofApp::saveScreenMatrix(bool bInverse) {
     
     
     ofVec3f origin = markers[0];
     ofVec3f vecX = 2*(origin-markers[1]);
     ofVec3f vecY = origin-markers[2];
     
-    ofVec3f lookAtDir = -(vecX.cross(vecY)).normalize();
+    ofVec3f lookAtDir = (vecX.cross(vecY)).normalize()*(bInverse ? -1 : 1);
     
     cout << lookAtDir << endl;
     ofVec3f center = markers[1]-0.5*vecY;
@@ -211,9 +211,10 @@ void ofApp::keyPressed(int key){
             state = STATE_POINT_PICKING;
             break;
         case 's':
+        case 'r':
             state = STATE_SCREEN;
             if (!markers.empty()) {
-                saveScreenMatrix();
+                saveScreenMatrix(key=='r');
             }
             cam.setPosition(0,0,position);
            
@@ -254,24 +255,24 @@ void ofApp::mouseDragged(int x, int y, int button){
 
     if (state==STATE_SCREEN || state==STATE_CAMERA) {
 
-        cam.dolly((lastPos.y-y)/ofGetHeight());
-        lastPos=ofVec2f(x,y);
+        cam.setPosition(ofVec3f(0,0,downPos.z+(downPos.y-y)/ofGetHeight()));
+       
         
-        if (state==STATE_SCREEN) {
-            position = cam.getPosition().z;
-        }
     }
 }
 
 //--------------------------------------------------------------
 void ofApp::mousePressed(int x, int y, int button){
-    lastPos = downPos = ofVec2f(x,y);
+    downPos= ofVec3f(x,y,cam.getPosition().z);
+    
     
 }
 
 //--------------------------------------------------------------
 void ofApp::mouseReleased(int x, int y, int button){
-    
+    if (state==STATE_SCREEN) {
+        position = cam.getPosition().z;
+    }
 }
 
 //--------------------------------------------------------------
