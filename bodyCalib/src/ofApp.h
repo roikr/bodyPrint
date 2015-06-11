@@ -13,7 +13,7 @@ class ofApp : public ofBaseApp{
         void exit();
     
         void updateMesh();
-        void saveScreenMatrix();
+        void saveScreenMatrix(bool bInverse);
 
 		void keyPressed(int key);
 		void keyReleased(int key);
@@ -44,8 +44,9 @@ class ofApp : public ofBaseApp{
     ofVec3f tempMarker;
     vector<ofVec3f> markers;
     
-    ofVec2f lastPos;
-    ofVec2f downPos;
+    ofVec3f downPos;
+    
+    
     ofMatrix4x4 screen;
     ofCamera cam;
     
