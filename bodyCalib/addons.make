@@ -1,0 +1,3 @@
+ofxGui
+ofxOpenNI2
+ofxShaders
