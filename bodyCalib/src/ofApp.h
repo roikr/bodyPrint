@@ -13,7 +13,7 @@ class ofApp : public ofBaseApp{
         void exit();
     
         void updateMesh();
-        void setScreenState();
+        void saveScreenMatrix();
 
 		void keyPressed(int key);
 		void keyReleased(int key);
@@ -25,26 +25,30 @@ class ofApp : public ofBaseApp{
 		void dragEvent(ofDragInfo dragInfo);
 		void gotMessage(ofMessage msg);
     
-    ofxOpenNI2 cam;
+    ofxOpenNI2 depthCam;
     ofTexture depthTex;
     ofVboMesh mesh;
     ofShader cloudShader;
     ofxPanel gui;
     
     ofParameter<int> pointSize;
-    ofParameter<float> depthScale;
-    ofParameter<float>minEdge0,maxEdge0,minEdge1,maxEdge1;
+    ofParameter<float>minEdge0,maxEdge0,position,minEdge1,maxEdge1,depthScale;
     ofParameter<string> fps;
+
+    
+    
     
     bool bUseShader;
-    ofEasyCam easy;
+    
     int state;
     ofVec3f tempMarker;
     vector<ofVec3f> markers;
     
+    ofVec2f lastPos;
     ofVec2f downPos;
-    ofMatrix4x4 xform,cform;
+    ofMatrix4x4 screen;
+    ofCamera cam;
     
-    ofCamera screen;
+    
 		
 };
