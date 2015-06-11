@@ -31,12 +31,18 @@ class ofApp : public ofBaseApp{
     ofxPanel gui;
     
     ofParameter<int> pointSize;
-    ofParameter<float> gridScale,gridOffset,depthScale;
+    ofParameter<float> depthScale;
     ofParameter<float>minEdge0,maxEdge0,minEdge1,maxEdge1;
     ofParameter<string> fps;
-    ofParameter<ofVec3f> sceneRotation,position,cameraRotation;
     
     bool bUseShader;
-   
+    ofEasyCam easy;
+    int state;
+    ofVec3f tempMarker;
+    ofVec3f pivot;
+    vector<ofVec3f> markers;
+    
+    ofVec2f downPos;
+    ofMatrix4x4 xform,cform;
 		
 };
