@@ -41,9 +41,7 @@ void ofApp::setup(){
     
     ofDisableArbTex();
     
-    virtualCam.lookAt(ofVec3f(0,0,1),ofVec3f(0,1,0));
-    virtualCam.setPosition(0,0,-0.01);
-    virtualCam.setNearClip(0.001);
+
     
     for (int i=0;i<CAMERAS_NUMBER;i++) {
         cam[i].params.setName("cam"+ofToString(i));
@@ -92,7 +90,10 @@ void ofApp::setup(){
     gui.add(videoQueue.set("videoQueue",""));
     gui.loadFromFile("settings.xml");
     
-    
+    virtualCam.lookAt(ofVec3f(0,0,1),ofVec3f(0,1,0));
+    virtualCam.setPosition(0,0,position);
+    //virtualCam.setPosition(0,0,-0.01);
+    virtualCam.setNearClip(0.001);
     
     recorder.setPixelFormat("gray");
     
@@ -107,7 +108,8 @@ void ofApp::setup(){
    
 #else
     
-    recorder.setFfmpegLocation(ofFilePath::getAbsolutePath("ffmpeg"));
+    // recorder.setFfmpegLocation(ofFilePath::getAbsolutePath("avconv"));
+    recorder.setFfmpegLocation("avconv");
     
 #endif
     ofxOpenNI2::init();
