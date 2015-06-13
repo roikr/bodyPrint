@@ -22,6 +22,10 @@ struct camera {
     
     ofVec3f tempMarker;
     vector<ofVec3f> markers;
+    ofParameter<ofVec3f> offset;
+    ofVec3f downOffset;
+    
+    ofColor color;
 };
 
 class ofApp : public ofBaseApp{
@@ -57,9 +61,10 @@ class ofApp : public ofBaseApp{
     ofShader cloudShader;
     ofFbo depthFbo;
     
-    ofParameter<float> position;
+    ofParameter<float> camZPos;
     ofCamera virtualCam;
-    ofVec3f downPos;
+    ofVec2f downPos;
+    float downCamZPos;
     
     
     ofParameter<float> tolerance; // for background subtraction
@@ -84,6 +89,8 @@ class ofApp : public ofBaseApp{
     
     ofxCvGrayscaleImage grayImg;
     ofxCvContourFinder contour;
+    
+    ofParameterGroup blobParams;
     ofParameter<float> minArea,maxArea;
     ofParameter<bool>blobDetection;
     
@@ -115,4 +122,5 @@ class ofApp : public ofBaseApp{
     
     bool bShowGui;
     bool bCaptureBg;
+    bool bUseBg;
 };

@@ -5,13 +5,15 @@
 #define STAGE_HEIGHT 768
 
 #define LAYERS_NUMBER 3
-#define CAMERAS_NUMBER 1
+
+#define CAMERAS_NUMBER 2
 
 #define STRINGIFY(A) #A
 
 enum {
     STATE_PICKING,
     STATE_CALIBRATION,
+    STATE_VISUAL,
     STATE_BACKGROUND,
     STATE_BLOB,
     STATE_IDLE,
@@ -41,7 +43,7 @@ void ofApp::setup(){
     
     ofDisableArbTex();
     
-
+    ofColor colors[]= {ofColor::red,ofColor::blue};
     
     for (int i=0;i<CAMERAS_NUMBER;i++) {
         cam[i].params.setName("cam"+ofToString(i));
@@ -49,17 +51,23 @@ void ofApp::setup(){
         cam[i].params.add(cam[i].maxEdge0.set("maxEdge0", 1.0, 0.0, 1.0));
         cam[i].params.add(cam[i].minEdge1.set("minEdge1", 0.0, 0.0, 2.0));
         cam[i].params.add(cam[i].maxEdge1.set("maxEdge1", 2.0, 0.0, 2.0));
+        cam[i].params.add(cam[i].offset.set("offset",ofVec3f(0.0)));
+        cam[i].color = colors[i];
+        
+        ofFile fileRead(cam[i].params.getName()+".txt");
+        fileRead >> cam[0].mat;
     }
     
-    ofFile fileRead("cam0.txt");
-    fileRead >> cam[0].mat;
+    
+    
+    
     
     gui.setup("panel");
     gui.add(fps.set("fps",""));
     gui.add(ambLevel.set("ambLevel", 0.5, 0.0, 1.0));
     gui.add(recLevel.set("recLevel", 0.5, 0.0, 1.0));
     gui.add(pointSize.set("pointSize",3,1,10));
-    gui.add(position.set("position",-0.01,-10,10));
+    gui.add(camZPos.set("camZPos",-0.01,-10,10));
     gui.add(depthScale.set("depthScale", 0, -5.0, 5.0)); // 10^-5
 
     for (int i=0;i<CAMERAS_NUMBER;i++) {
@@ -76,9 +84,12 @@ void ofApp::setup(){
     gui.add(sat.set("sat", 0.0,0.0,1.0));
     gui.add(offset.set("offset", 0.0,-0.5,0.5));
     
-    gui.add(minArea.set("minArea",0.05,0,0.1));
-    gui.add(maxArea.set("maxArea", 0.5, 0, 1));
-    gui.add(blobDetection.set("blobDetection",false));
+    
+    blobParams.add(minArea.set("minArea",0.05,0,0.1));
+    blobParams.add(maxArea.set("maxArea", 0.5, 0, 1));
+    blobParams.add(blobDetection.set("blobDetection",false));
+    gui.add(blobParams);
+    
     gui.add(recordTime.set("recordTime",""));
     gui.add(waitTime.set("waitTime",""));
     gui.add(recordDuration.set("recordDuration",10,10,30));
@@ -91,7 +102,7 @@ void ofApp::setup(){
     gui.loadFromFile("settings.xml");
     
     virtualCam.lookAt(ofVec3f(0,0,1),ofVec3f(0,1,0));
-    virtualCam.setPosition(0,0,position);
+    virtualCam.setPosition(0,0,camZPos);
     //virtualCam.setPosition(0,0,-0.01);
     virtualCam.setNearClip(0.001);
     
@@ -140,11 +151,6 @@ void ofApp::setup(){
     camFbo.end();
     
 
-//    createDepthBackgroundSubtractionShader(subtractShader);
-//    subtractShader.begin();
-//    subtractShader.setUniformTexture("bgTex", backgroundFbo.getTextureReference(), 1);
-//    subtractShader.end();
-    
     
     string fragment = STRINGIFY(
                                 \n#version 150\n
@@ -265,11 +271,12 @@ void ofApp::setup(){
     
     ofSetColor(255);
     
-    state = STATE_PICKING; //STATE_IDLE
-    bShowGui = false;
-    ofHideCursor();
+    state = STATE_VISUAL; //STATE_IDLE
+    bShowGui = true;
+    //ofHideCursor();
     bFirstIdle = false;
-    bCaptureBg = true;
+    bCaptureBg = false;
+    bUseBg = false;
 }
 
 void ofApp::updateMesh(camera &cam) {
@@ -283,46 +290,27 @@ void ofApp::updateMesh(camera &cam) {
     int minE = cam.minEdge0*USHRT_MAX;
     int maxE = cam.maxEdge0*USHRT_MAX;
     int toler = tolerance*USHRT_MAX;
-    
-    switch (state) {
-        case STATE_PICKING:
-        case STATE_CALIBRATION:
-        case STATE_BLOB:
-        case STATE_IDLE:
-        case STATE_RECORD:
-            for(int iy = 0; iy < rows; iy++) {
-                for(int ix = 0; ix < columns; ix++) {
-                    short unsigned int depth = cam.sensor.getDepth()[iy*columns+ix];
-                    if (depth && depth> minE && depth<maxE) {
-                        cam.mesh.addVertex(cam.sensor.getWorldCoordinateAlt(ix, iy, depth));
-                        
-                    }
+
+    for(int iy = 0; iy < rows; iy++) {
+        for(int ix = 0; ix < columns; ix++) {
+            short unsigned int ref = cam.background.getPixels()[iy*columns+ix];
+            short unsigned int depth = cam.sensor.getDepth()[iy*columns+ix];
+            if (state == STATE_BACKGROUND) {
+                if (ref && ref> minE && ref<maxE) {
+                    cam.mesh.addVertex(cam.sensor.getWorldCoordinateAlt(ix, iy, ref));
                 }
-            }
-            break;
-        case STATE_BACKGROUND:
-            for(int iy = 0; iy < rows; iy++) {
-                for(int ix = 0; ix < columns; ix++) {
-                    short unsigned int depth = cam.background.getPixels()[iy*columns+ix];
-                    if (depth && depth> minE && depth<maxE) {
-                        cam.mesh.addVertex(cam.sensor.getWorldCoordinateAlt(ix, iy, depth));
-                        
-                    }
-                }
-            }
-            break;
-        default:
-            for(int iy = 0; iy < rows; iy++) {
-                for(int ix = 0; ix < columns; ix++) {
-                    short unsigned int ref = cam.background.getPixels()[iy*columns+ix];
-                    short unsigned int depth = cam.sensor.getDepth()[iy*columns+ix];
+            } else {
+                if (bUseBg) {
                     if (depth && abs((int)depth-(int)ref)>toler && depth> minE && depth<maxE) {
                         cam.mesh.addVertex(cam.sensor.getWorldCoordinateAlt(ix, iy, depth));
-                        
+                    }
+                } else {
+                    if (depth && depth> minE && depth<maxE) {
+                        cam.mesh.addVertex(cam.sensor.getWorldCoordinateAlt(ix, iy, depth));
                     }
                 }
             }
-            break;
+        }
     }
 }
 
@@ -354,6 +342,7 @@ void ofApp::updateLayer(layer &l,ofFbo &depth,float decay) {
         blurShader.setUniform2f("dir", 0, 1.0/depth.getHeight());
         pong.draw(0,0);
         blurShader.end();
+        //depth.draw(0,0);
         l.fbo.end();
     } else {
         l.fbo.begin();
@@ -384,11 +373,12 @@ void ofApp::update(){
         cam[i].sensor.update();
     }
     
+    bool bNewFrame = cam[0].sensor.bNewDepth;
 #if (CAMERAS_NUMBER==2)
-    if (cam[0].sensor.bNewDepth && cam[1].sensor.bNewDepth) {
-#else
-    if (cam[0].sensor.bNewDepth) {
+    bNewFrame = bNewFrame && cam[1].sensor.bNewDepth;
 #endif
+        
+    if (bNewFrame) {
         if (bCaptureBg) {
             bCaptureBg = false;
             for (int i=0;i<CAMERAS_NUMBER;i++) {
@@ -403,12 +393,12 @@ void ofApp::update(){
         cloudShader.setUniform1f("scale",pow(10,depthScale));
         
         for (int i=0; i<CAMERAS_NUMBER; i++) {
-            
+            updateMesh(cam[i]);
             cloudShader.setUniform1f("minEdge", cam[i].minEdge1);
             cloudShader.setUniform1f("maxEdge",cam[i].maxEdge1);
             ofPushMatrix();
+            ofTranslate(cam[i].offset);
             ofMultMatrix(cam[i].mat);
-            updateMesh(cam[i]);
             renderCam(cam[i]);
             ofPopMatrix();
             
@@ -442,6 +432,13 @@ void ofApp::update(){
 
         
         switch (state) {
+            case STATE_VISUAL:
+                camFbo.begin();
+                depthFbo.draw(0,0);
+                camFbo.end();
+                updateLayer(camLayer,camFbo,decay1);
+
+                break;
             case STATE_IDLE:
                 
                 updateLayer(camLayer,camFbo,decay1);
@@ -602,6 +599,9 @@ void ofApp::update(){
         compShader.end();
         compFbo.end();
     }
+        
+        
+    
     
 }
 
@@ -616,19 +616,26 @@ void ofApp::draw(){
         case STATE_PICKING:
             virtualCam.begin();
             for (int i=0; i<CAMERAS_NUMBER; i++) {
+                ofSetColor(cam[i].color);
                 renderCam(cam[i]);
             }
             virtualCam.end();
+            
             break;
             
         case STATE_CALIBRATION:
         case STATE_BACKGROUND:
             virtualCam.begin();
             for (int i=0; i<CAMERAS_NUMBER; i++) {
+                ofSetColor(cam[i].color);
+                ofPushMatrix();
+                ofTranslate(cam[i].offset);
                 ofMultMatrix(cam[i].mat);
                 renderCam(cam[i]);
+                ofPopMatrix();
             }
             virtualCam.end();
+            ofSetColor(255);
             break;
         case STATE_BLOB:
             depthFbo.draw(0, 0);
@@ -639,7 +646,9 @@ void ofApp::draw(){
             break;
         
         
-            
+        case STATE_VISUAL:
+            camLayer.fbo.draw(0, 0);
+            break;
         default:
             
             compFbo.draw(0, 0);
@@ -728,7 +737,7 @@ void ofApp::saveScreenMatrix(int index,bool bInverse) {
     ofVec3f center = thecam.markers[1]-0.5*vecY;
     thecam.mat.makeLookAtViewMatrix(center, center+lookAtDir, vecY);
     
-    ofFile fileWrite("cam"+ofToString(index)+".txt",ofFile::WriteOnly);
+    ofFile fileWrite(thecam.params.getName()+".txt",ofFile::WriteOnly);
     fileWrite << thecam.mat;
     
     
@@ -792,6 +801,9 @@ void ofApp::keyPressed(int key){
             state = STATE_CALIBRATION;
             break;
         
+        case 'v':
+            state = STATE_VISUAL;
+            break;
             
         case 'i':
             state = STATE_IDLE;
@@ -828,21 +840,40 @@ void ofApp::mouseMoved(int x, int y ){
 
 //--------------------------------------------------------------
 void ofApp::mouseDragged(int x, int y, int button){
-    if ((state==STATE_PICKING || state==STATE_CALIBRATION) && button==OF_MOUSE_BUTTON_MIDDLE) {
-        virtualCam.setPosition(ofVec3f(0,0,downPos.z+(downPos.y-y)/ofGetHeight()));
+    if (state==STATE_CALIBRATION) {
+        switch (button) {
+            case OF_MOUSE_BUTTON_MIDDLE:
+                virtualCam.setPosition(ofVec3f(0,0,downCamZPos+(downPos.y-y)/ofGetHeight()));
+                camZPos = virtualCam.getPosition().z;
+                break;
+            case OF_MOUSE_BUTTON_LEFT:
+                cam[0].offset = cam[0].downOffset+(downPos-ofVec2f(x,y))/ofGetHeight();
+                break;
+            case OF_MOUSE_BUTTON_RIGHT:
+#if (CAMERAS_NUMBER == 2)
+                cam[1].offset = cam[1].downOffset+(downPos-ofVec2f(x,y))/ofGetHeight();
+#endif
+                break;
+                
+                
+            default:
+                break;
+        }
     }
 }
 
 //--------------------------------------------------------------
 void ofApp::mousePressed(int x, int y, int button){
-    downPos= ofVec3f(x,y,virtualCam.getPosition().z);
+    downPos= ofVec2f(x,y);
+    downCamZPos = virtualCam.getPosition().z;
+    for (int i=0;i<CAMERAS_NUMBER;i++) {
+        cam[i].downOffset = cam[i].offset;
+    }
 }
 
 //--------------------------------------------------------------
 void ofApp::mouseReleased(int x, int y, int button){
-    if ((state==STATE_PICKING || state==STATE_CALIBRATION) && button==OF_MOUSE_BUTTON_MIDDLE) {
-        position = virtualCam.getPosition().z;
-    }
+    
 }
 
 //--------------------------------------------------------------
