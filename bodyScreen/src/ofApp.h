@@ -82,10 +82,15 @@ class ofApp : public ofBaseApp{
     ofParameter<float> variance;
     ofParameter<int> radius;
     
+    ofParameterGroup levels;
+    ofParameter<float> inputBlack,inputWhite,gamma,outputBlack,outputWhite;
+    
     layer camLayer;
     vector<layer> layers;
     ofFbo compFbo;
     ofShader compShader;
+    
+    ofShader screenShader;
     
     ofxCvGrayscaleImage grayImg;
     ofxCvContourFinder contour;

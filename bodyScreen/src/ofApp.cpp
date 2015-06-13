@@ -51,7 +51,7 @@ void ofApp::setup(){
         cam[i].params.add(cam[i].maxEdge0.set("maxEdge0", 1.0, 0.0, 1.0));
         cam[i].params.add(cam[i].minEdge1.set("minEdge1", 0.0, 0.0, 2.0));
         cam[i].params.add(cam[i].maxEdge1.set("maxEdge1", 2.0, 0.0, 2.0));
-        cam[i].params.add(cam[i].offset.set("offset",ofVec3f(0.0)));
+        cam[i].params.add(cam[i].offset.set("offset",ofVec3f(0.0),ofVec3f(0.0),ofVec3f(1.0)));
         cam[i].color = colors[i];
         
         ofFile fileRead(cam[i].params.getName()+".txt");
@@ -74,7 +74,7 @@ void ofApp::setup(){
         gui.add(cam[i].params);
     }
     
-        gui.add(tolerance.set("tolerance", 0.1, 0.0, 1.0));
+    gui.add(tolerance.set("tolerance", 0.1, 0.0, 1.0));
     gui.add(decay0.set("decay0", 0.9, 0.9, 1.0));
     gui.add(decay1.set("decay1", 0.9, 0.9, 1.0));
     gui.add(strobeRate.set("strobeRate", 15, 1, 30));
@@ -84,7 +84,15 @@ void ofApp::setup(){
     gui.add(sat.set("sat", 0.0,0.0,1.0));
     gui.add(offset.set("offset", 0.0,-0.5,0.5));
     
+    levels.setName("levels");
+    levels.add(inputBlack.set("inputBlack",0,0,1));
+    levels.add(inputWhite.set("inputWhite",1,0,1));
+    levels.add(gamma.set("gamma",1,0.3,3));
+    levels.add(outputBlack.set("outputBlack",0,0,1));
+    levels.add(outputWhite.set("outputWhite",1,0,1));
+    gui.add(levels);
     
+    blobParams.setName("blobs");
     blobParams.add(minArea.set("minArea",0.05,0,0.1));
     blobParams.add(maxArea.set("maxArea", 0.5, 0, 1));
     blobParams.add(blobDetection.set("blobDetection",false));
@@ -109,19 +117,10 @@ void ofApp::setup(){
     recorder.setPixelFormat("gray");
     
 #ifdef TARGET_OSX
-    
-    
-    //    recorder.setFfmpegLocation("~/ffmpeg");
     recorder.setVideoCodec("mpeg4");
     recorder.setVideoBitrate("800k");
-    
-    
-   
 #else
-    
-    // recorder.setFfmpegLocation(ofFilePath::getAbsolutePath("avconv"));
     recorder.setFfmpegLocation("avconv");
-    
 #endif
     ofxOpenNI2::init();
     vector<string> devices = ofxOpenNI2::listDevices();
@@ -217,15 +216,49 @@ void ofApp::setup(){
     camLayer.fbo.end();
     camLayer.hueOffset=0;
     
+    createBlurShader(blurShader, radius, variance);
+    
+    string screenFragment = STRINGIFY(
+                                    \n#version 150\n
+                                      
+                                    uniform sampler2D tex0;
+                                    uniform sampler2D tex1;
+                                    uniform float inputBlack;
+                                    uniform float inputWhite;
+                                    uniform float gamma;
+                                    uniform float outputBlack;
+                                    uniform float outputWhite;
+                                    
+                                    in vec2 texCoordVarying;
+                                    out vec4 fragColor;
+                                    
+                                    void main(void) {
+                                        vec3 col0 = texture(tex0,texCoordVarying).rgb;
+                                        float inValue = (clamp(texture(tex1,texCoordVarying).r,inputBlack,inputWhite)-inputBlack)/(inputWhite-inputBlack);
+                                        float outValue = mix(outputBlack,outputWhite,pow(inValue,gamma));
+                                        
+                                        vec3 color = 1-(1-col0)*(1-vec3(outValue));
+                                        fragColor = vec4(color,1.0);
+                                    }
+                                    
+                                    );
+    
+    
+    
+    screenShader.setupShaderFromSource(GL_VERTEX_SHADER, getSimpleVertex());
+    screenShader.setupShaderFromSource(GL_FRAGMENT_SHADER, screenFragment);
+    screenShader.bindDefaults();
+    screenShader.linkProgram();
+    
+    
+    grayImg.allocate(depthFbo.getWidth(), depthFbo.getHeight()); // for blob detection
+    
     compFbo.allocate(depthFbo.getWidth(),depthFbo.getHeight());
     compFbo.begin();
     ofClear(0);
     compFbo.end();
     
     
-    createBlurShader(blurShader, radius, variance);
-    
-    grayImg.allocate(depthFbo.getWidth(), depthFbo.getHeight());
     
     ofVideoPlayer p;
     players.assign(LAYERS_NUMBER,p);
@@ -317,7 +350,7 @@ void ofApp::updateMesh(camera &cam) {
 void ofApp::updateLayer(layer &l,ofFbo &depth,float decay) {
     ping.begin();
     strobeShader.begin();
-    strobeShader.setUniformTexture("memTex", l.fbo.getTextureReference(), 2);
+    strobeShader.setUniformTexture("memTex", l.fbo.getTextureReference(), 1);
     strobeShader.setUniform1f("decay", decay);
     strobeShader.setUniform1i("frameNum", frameNum);
     strobeShader.setUniform1i("strobeRate", strobeRate);
@@ -337,18 +370,26 @@ void ofApp::updateLayer(layer &l,ofFbo &depth,float decay) {
         blurShader.end();
         pong.end();
         
-        l.fbo.begin();
+        ping.begin();
         blurShader.begin();
         blurShader.setUniform2f("dir", 0, 1.0/depth.getHeight());
         pong.draw(0,0);
         blurShader.end();
-        //depth.draw(0,0);
-        l.fbo.end();
-    } else {
-        l.fbo.begin();
-        ping.draw(0,0);
-        l.fbo.end();
+        
+        ping.end();
     }
+    
+    screenShader.begin();
+    screenShader.setUniformTexture("tex1", depth.getTextureReference(), 2);
+    screenShader.setUniform1f("inputBlack", inputBlack);
+    screenShader.setUniform1f("inputWhite", inputWhite);
+    screenShader.setUniform1f("gamma", gamma);
+    screenShader.setUniform1f("outputBlack", outputBlack);
+    screenShader.setUniform1f("outputWhite", outputWhite);
+    l.fbo.begin();
+    ping.draw(0, 0);
+    l.fbo.end();
+    screenShader.end();
 }
 
 
@@ -592,9 +633,9 @@ void ofApp::update(){
         
         compFbo.begin();
         compShader.begin();
-        for (int i=0; i<layers.size();i++) {
-            compShader.setUniformTexture("tex"+ofToString(i+1), layers[i].fbo.getTextureReference(), i+3);
-        }
+//        for (int i=0; i<layers.size();i++) {
+//            compShader.setUniformTexture("tex"+ofToString(i+1), layers[i].fbo.getTextureReference(), i+3);
+//        }
         camLayer.fbo.draw(0, 0);
         compShader.end();
         compFbo.end();
