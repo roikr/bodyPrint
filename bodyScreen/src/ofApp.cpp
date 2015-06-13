@@ -39,7 +39,7 @@ void ofApp::setup(){
     ambientSound.play();
     
     
-    //ofSetWindowShape(STAGE_WIDTH, STAGE_HEIGHT);
+    ofSetWindowShape(STAGE_WIDTH, STAGE_HEIGHT);
     
     ofDisableArbTex();
     
@@ -306,10 +306,16 @@ void ofApp::setup(){
     
     state = STATE_VISUAL; //STATE_IDLE
     bShowGui = true;
-    //ofHideCursor();
+    ofHideCursor();
+    bShowMouse = false;
     bFirstIdle = false;
     bCaptureBg = false;
     bUseBg = false;
+    
+    warper.setup();
+    warper.load();
+    warper.hide();
+    bEnableWarper = true;
 }
 
 void ofApp::updateMesh(camera &cam) {
@@ -651,7 +657,12 @@ void ofApp::draw(){
     
     ofBackground(0);
     ofSetColor(255);
-    
+   
+    ofPushMatrix();
+    if (bEnableWarper) {
+        ofMultMatrix(warper.getMatrix());
+        
+    }
     
     switch (state) {
         case STATE_PICKING:
@@ -753,6 +764,8 @@ void ofApp::draw(){
         }
         ofSetLineWidth(1);
     }
+    ofPopMatrix();
+    warper.draw();
 }
 
 void ofApp::exit() {
@@ -790,7 +803,10 @@ void ofApp::keyPressed(int key){
     switch (key) {
         case ' ':
             bShowGui=!bShowGui;
-            if (bShowGui) {
+            break;
+        case 'm':
+            bShowMouse=!bShowMouse;
+            if (bShowMouse) {
                 ofShowCursor();
             } else {
                 ofHideCursor();
@@ -824,7 +840,7 @@ void ofApp::keyPressed(int key){
                 saveScreenMatrix(1,key=='9');
             }
             break;
-        case 'm':
+        case 'r':
             cam[0].markers.clear();
             cam[1].markers.clear();
             break;
@@ -863,6 +879,26 @@ void ofApp::keyPressed(int key){
             bCaptureBg = true;
            
             break;
+        case 'w':
+            bEnableWarper =!bEnableWarper;
+            break;
+        case 'a':
+            warper.toggleShow();
+            warper.save();
+            break;
+        case 'z': {
+            
+            int x = (ofGetWidth() - STAGE_WIDTH) * 0.5;       // center on screen.
+            int y = (ofGetHeight() - STAGE_HEIGHT) * 0.5;     // center on screen.
+            int sw = STAGE_WIDTH;
+            int sh = STAGE_HEIGHT;
+            
+            warper.setSourceRect(ofRectangle(0, 0, sw, sh));              // this is the source rectangle which is the size of the image and located at ( 0, 0 )
+            warper.setTopLeftCornerPosition(ofPoint(x, y));             // this is position of the quad warp corners, centering the image on the screen.
+            warper.setTopRightCornerPosition(ofPoint(x + sw, y));        // this is position of the quad warp corners, centering the image on the screen.
+            warper.setBottomLeftCornerPosition(ofPoint(x, y + sh));      // this is position of the quad warp corners, centering the image on the screen.
+            warper.setBottomRightCornerPosition(ofPoint(x + sw, y + sh)); // this is position of the quad warp corners, centering the image on the screen.
+        }  break;
         
         default:
             break;

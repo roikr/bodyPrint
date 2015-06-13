@@ -5,7 +5,7 @@
 #include "ofxGui.h"
 #include "ofxVideoRecorder.h"
 #include "ofxOpenCv.h"
-
+#include "ofxQuadWarp.h"
 
 struct layer {
     ofFbo fbo;
@@ -128,4 +128,8 @@ class ofApp : public ofBaseApp{
     bool bShowGui;
     bool bCaptureBg;
     bool bUseBg;
+    
+    ofxQuadWarp warper;
+    bool bEnableWarper;
+    bool bShowMouse;
 };
