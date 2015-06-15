@@ -107,6 +107,7 @@ class ofApp : public ofBaseApp{
     ofFbo blobFbo;
     
     ofxVideoRecorder recorder;
+    ofFbo recorderFbo;
     
     ofParameterGroup timerParams;
     float startTime;

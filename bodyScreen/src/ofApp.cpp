@@ -6,7 +6,7 @@
 //#define SCREEN_ASPECT_RATIO 139.5/200.5
 #define DEPTH_SCALE 0.5
 
-#define LAYERS_NUMBER 1
+#define LAYERS_NUMBER 2
 #define CAMERAS_NUMBER 2
 
 #define STRINGIFY(A) #A
@@ -128,14 +128,17 @@ void ofApp::setup(){
     //virtualCam.setPosition(0,0,-0.01);
     virtualCam.setNearClip(0.001);
     
-    recorder.setPixelFormat("gray");
+    //recorder.setPixelFormat("gray");
     
 #ifdef TARGET_OSX
     recorder.setVideoCodec("mpeg4");
-    recorder.setVideoBitrate("800k");
+    recorder.setVideoBitrate("5000k");
 #else
     recorder.setFfmpegLocation("avconv");
 #endif
+    
+    
+    
     ofxOpenNI2::init();
     vector<string> devices = ofxOpenNI2::listDevices();
     
@@ -167,7 +170,6 @@ void ofApp::setup(){
     ofClear(0);
     camFbo.end();
     
-
     
     string fragment = STRINGIFY(
                                 \n#version 150\n
@@ -217,6 +219,9 @@ void ofApp::setup(){
     
     ping.allocate(depthFbo.getWidth(),depthFbo.getHeight());
     pong.allocate(depthFbo.getWidth(),depthFbo.getHeight());
+    
+    recorderFbo.allocate(depthFbo.getWidth(),depthFbo.getHeight(),GL_RGB);
+    
     
     for (int i=0;i<LAYERS_NUMBER;i++) {
         layer l;
@@ -571,9 +576,14 @@ void ofApp::update(){
                 
                 updateLayer(camLayer,camFbo,decay0);
                 
-                
-                
-                recorder.addFrame(pixels);
+                recorderFbo.begin();
+                ofClear(0);
+                camLayer.fbo.draw(0, 0);
+                recorderFbo.end();
+                ofPixels recordPixel;
+                recorderFbo.readToPixels(recordPixel);
+            
+                recorder.addFrame(recordPixel);
                 
                 
                 if (ofGetElapsedTimef()>recordTimer || ofGetElapsedTimef()>waitTimer) {
@@ -660,19 +670,12 @@ void ofApp::update(){
     
     if (state==STATE_IDLE || state == STATE_RECORD) {
         for (int i=0;i<LAYERS_NUMBER;i++) {
-            
+            layers[i].fbo.begin();
+            ofClear(0);
             if (players[i].isLoaded() && !players[i].isPaused()) {
-                depthFbo.begin();
                 players[i].draw(0, 0);
-                depthFbo.end();
-                updateLayer(layers[i], depthFbo,decay0);
-                
-            } else {
-                depthFbo.begin();
-                ofClear(0);
-                depthFbo.end();
-                updateLayer(layers[i], depthFbo,decay1);
             }
+            layers[i].fbo.end();
         }
         
         compFbo.begin();
