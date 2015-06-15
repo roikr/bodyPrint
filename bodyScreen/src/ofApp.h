@@ -26,6 +26,10 @@ struct camera {
     ofVec3f downOffset;
     
     ofColor color;
+    
+    bool bFlipX;
+    bool bFlipY;
+    bool bFlipZ;
 };
 
 class ofApp : public ofBaseApp{
@@ -47,17 +51,17 @@ class ofApp : public ofBaseApp{
 		void gotMessage(ofMessage msg);
     
         void updateMesh(camera &cam);
-        void renderCam(camera &cam);
+        void renderCam(camera &cam,int pointSize);
         void updateLayer(layer &l,ofFbo &depth,float decay);
         void captureBackground();
     
-        void saveScreenMatrix(int index,bool bInverse);
+        void saveScreenMatrix(camera &cam);
     
     
     camera cam[2];
     
     ofParameter<int> pointSize;
-    ofParameter<float>depthScale;
+    //ofParameter<float>depthScale;
     ofShader cloudShader;
     ofFbo depthFbo;
     
@@ -72,7 +76,7 @@ class ofApp : public ofBaseApp{
     ofFbo camFbo; // duplicate depthFbo for freeze and fade
     
     
-    
+    ofParameterGroup visualParams;
     ofShader strobeShader;
     ofFbo ping,pong;
     ofParameter<float> decay0,decay1,sat,hueRate,offset;
@@ -95,12 +99,16 @@ class ofApp : public ofBaseApp{
     ofxCvGrayscaleImage grayImg;
     ofxCvContourFinder contour;
     
-    ofParameterGroup blobParams;
+    ofParameterGroup detectionParams;
+    ofParameter<int> blobPointSize;
     ofParameter<float> minArea,maxArea;
     ofParameter<bool>blobDetection;
     
+    ofFbo blobFbo;
+    
     ofxVideoRecorder recorder;
     
+    ofParameterGroup timerParams;
     float startTime;
     ofParameter<string> videoQueue;
     ofParameter<float> recordDuration,waitDuration,idleInterval,minimumDuration;
