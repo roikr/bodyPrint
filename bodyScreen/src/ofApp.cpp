@@ -7,7 +7,7 @@
 #define DEPTH_SCALE 0.5
 
 #define LAYERS_NUMBER 2
-#define CAMERAS_NUMBER 2
+#define CAMERAS_NUMBER 1
 
 #define STRINGIFY(A) #A
 
@@ -118,6 +118,8 @@ void ofApp::setup(){
     timerParams.add(videoQueue.set("videoQueue",""));
     gui.add(timerParams);
     
+    gui.add(fadeIn.set("fadeIn", 0.5, 0, 2));
+    gui.add(fadeOut.set("fadeOut", 1.5, 0, 2));
     gui.add(ambLevel.set("ambLevel", 0.5, 0.0, 1.0));
     gui.add(recLevel.set("recLevel", 0.5, 0.0, 1.0));
     
@@ -672,11 +674,19 @@ void ofApp::update(){
         for (int i=0;i<LAYERS_NUMBER;i++) {
             layers[i].fbo.begin();
             ofClear(0);
+            
             if (players[i].isLoaded() && !players[i].isPaused()) {
+                float inPos = fadeIn/players[i].getDuration();
+                float outPos = 1-fadeOut/players[i].getDuration();
+                //cout <<players[i].getPosition() << '\t' << inPos << '\t' << outPos << endl;
+                float alpha = ofMap(players[i].getPosition(), 0, inPos, 0, 1,true)-ofMap(players[i].getPosition(), outPos, 1, 0, 1,true);
+                ofSetColor(alpha*255);
                 players[i].draw(0, 0);
             }
             layers[i].fbo.end();
         }
+        
+        ofSetColor(255);
         
         compFbo.begin();
         compShader.begin();

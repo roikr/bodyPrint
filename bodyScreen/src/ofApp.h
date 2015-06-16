@@ -119,7 +119,7 @@ class ofApp : public ofBaseApp{
     
     vector<string> memories;
     vector<ofVideoPlayer> players;
-    
+    ofParameter<float> fadeIn,fadeOut;
     
     ofParameter<string> fps;
     ofxPanel gui;
