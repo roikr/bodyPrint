@@ -7,7 +7,6 @@
 #define DEPTH_SCALE 0.5
 
 #define LAYERS_NUMBER 2
-#define CAMERAS_NUMBER 1
 
 #define STRINGIFY(A) #A
 
@@ -50,6 +49,12 @@ void ofApp::setup(){
     
     for (int i=0;i<CAMERAS_NUMBER;i++) {
         cam[i].params.setName("cam"+ofToString(i));
+#if (CAMERAS_NUMBER==2)
+        cam[i].params.add(cam[i].index.set("index",i,0,CAMERAS_NUMBER-1));
+#else
+        cam[i].index = 0;
+#endif
+        
         cam[i].params.add(cam[i].minEdge0.set("minEdge0", 0.0, 0.0, 1.0));
         cam[i].params.add(cam[i].maxEdge0.set("maxEdge0", 1.0, 0.0, 1.0));
         cam[i].params.add(cam[i].minEdge1.set("minEdge1", 0.0, 0.0, 2.0));
@@ -149,9 +154,10 @@ void ofApp::setup(){
 //    }
     
     for (int i=0;i<CAMERAS_NUMBER;i++) {
-        cam[i].sensor.setup(devices[i]);
-        cam[i].sensor.setDepthMode(5);
-        cam[i].background.allocate(cam[i].sensor.depthMode.width, cam[i].sensor.depthMode.height, 1);
+        sensor &s(sensors[i]);
+        s.cam.setup(devices[i]);
+        s.cam.setDepthMode(5);
+        s.background.allocate(s.cam.depthMode.width, s.cam.depthMode.height, 1);
     }
     
     
@@ -347,9 +353,10 @@ void ofApp::updateMesh(camera &cam) {
     
     cam.mesh.clear();
     cam.mesh.setMode(OF_PRIMITIVE_POINTS);
+    sensor &s(sensors[cam.index]);
     
-    int rows=cam.sensor.depthMode.height;
-    int columns=cam.sensor.depthMode.width;
+    int rows=s.cam.depthMode.height;
+    int columns=s.cam.depthMode.width;
     
     int minE = cam.minEdge0*USHRT_MAX;
     int maxE = cam.maxEdge0*USHRT_MAX;
@@ -357,20 +364,20 @@ void ofApp::updateMesh(camera &cam) {
 
     for(int iy = 0; iy < rows; iy++) {
         for(int ix = 0; ix < columns; ix++) {
-            short unsigned int ref = cam.background.getPixels()[iy*columns+ix];
-            short unsigned int depth = cam.sensor.getDepth()[iy*columns+ix];
+            short unsigned int ref = s.background.getPixels()[iy*columns+ix];
+            short unsigned int depth = s.cam.getDepth()[iy*columns+ix];
             if (state == STATE_BACKGROUND) {
                 if (ref && ref> minE && ref<maxE) {
-                    cam.mesh.addVertex(cam.sensor.getWorldCoordinateAlt(ix,iy, ref));
+                    cam.mesh.addVertex(s.cam.getWorldCoordinateAlt(ix,iy, ref));
                 }
             } else {
                 if (bUseBg) {
                     if (depth && abs((int)depth-(int)ref)>toler && depth> minE && depth<maxE) {
-                        cam.mesh.addVertex(cam.sensor.getWorldCoordinateAlt(ix,iy, depth));
+                        cam.mesh.addVertex(s.cam.getWorldCoordinateAlt(ix,iy, depth));
                     }
                 } else {
                     if (depth && depth> minE && depth<maxE) {
-                        cam.mesh.addVertex(cam.sensor.getWorldCoordinateAlt(ix,iy, depth));
+                        cam.mesh.addVertex(s.cam.getWorldCoordinateAlt(ix,iy, depth));
                     }
                 }
             }
@@ -442,19 +449,20 @@ void ofApp::update(){
     fps = ofToString(ofGetFrameRate());
     
     for (int i=0;i<CAMERAS_NUMBER;i++) {
-        cam[i].sensor.update();
+        sensors[i].cam.update();
     }
     
-    bool bNewFrame = cam[0].sensor.bNewDepth;
+    bool bNewFrame = sensors[0].cam.bNewDepth;
 #if (CAMERAS_NUMBER==2)
-    bNewFrame = bNewFrame && cam[1].sensor.bNewDepth;
+    bNewFrame = bNewFrame && sensors[1].cam.bNewDepth;
 #endif
         
     if (bNewFrame) {
         if (bCaptureBg) {
             bCaptureBg = false;
             for (int i=0;i<CAMERAS_NUMBER;i++) {
-                cam[i].background.setFromPixels(cam[i].sensor.getDepth(), cam[i].sensor.depthMode.width, cam[i].sensor.depthMode.height, 1);
+                sensor &s(sensors[i]);
+                s.background.setFromPixels(s.cam.getDepth(), s.cam.depthMode.width, s.cam.depthMode.height, 1);
             }
         }
         
@@ -831,7 +839,7 @@ void ofApp::draw(){
 
 void ofApp::exit() {
     for (int i=0;i<CAMERAS_NUMBER;i++) {
-        cam[i].sensor.exit();
+        sensors[i].cam.exit();
     }
     for (vector<ofVideoPlayer>::iterator iter=players.begin();iter!=players.end();iter++) {
         iter->close();
@@ -976,6 +984,12 @@ void ofApp::keyPressed(int key){
             case 'i':
                 state = STATE_IDLE;
                 break;
+#if (CAMERAS_NUMBER==2)
+            case 'f':
+                cam[0].index = cam[1].index;
+                cam[1].index = 1-cam[0].index;
+                break;
+#endif
             case 't':
                 ofToggleFullscreen();
                 break;

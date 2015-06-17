@@ -7,18 +7,26 @@
 #include "ofxOpenCv.h"
 #include "ofxQuadWarp.h"
 
+
+#define CAMERAS_NUMBER 2
+
 struct layer {
     ofFbo fbo;
     float hueOffset;
 };
 
+struct sensor {
+    ofxOpenNI2 cam;
+    ofShortPixels background;
+};
+
 struct camera {
-    ofxOpenNI2 sensor;
+    ofParameter<int>index;
     ofParameter<float>minEdge0,maxEdge0,minEdge1,maxEdge1;
     ofMatrix4x4 mat;
     ofVboMesh mesh;
     ofParameterGroup params;
-    ofShortPixels background;
+    
     
     ofVec3f tempMarker;
     vector<ofVec3f> markers;
@@ -57,8 +65,8 @@ class ofApp : public ofBaseApp{
     
         void saveScreenMatrix(camera &cam);
     
-    
-    camera cam[2];
+    sensor sensors[CAMERAS_NUMBER];
+    camera cam[CAMERAS_NUMBER];
     
     ofParameter<int> pointSize;
     //ofParameter<float>depthScale;
