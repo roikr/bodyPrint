@@ -1,21 +1,22 @@
 #include "ofApp.h"
 #include "Shaders.h"
 
-#define STAGE_WIDTH 1024
-#define STAGE_HEIGHT 768
+#define STAGE_WIDTH 800
+#define STAGE_HEIGHT 1080
+//#define SCREEN_ASPECT_RATIO 139.5/200.5
+#define DEPTH_SCALE 0.5
 
-#define LAYERS_NUMBER 3
-
-#define CAMERAS_NUMBER 2
+#define LAYERS_NUMBER 2
 
 #define STRINGIFY(A) #A
 
 enum {
     STATE_PICKING,
-    STATE_CALIBRATION,
+    STATE_CAMERA,
+    STATE_EDGES,
     STATE_VISUAL,
     STATE_BACKGROUND,
-    STATE_BLOB,
+    STATE_DETECTION,
     STATE_IDLE,
     STATE_RECORD,
     
@@ -24,7 +25,8 @@ enum {
 
 //--------------------------------------------------------------
 void ofApp::setup(){
-    
+    cout << "version: "   << glGetString(GL_VERSION) << endl << "vendor: " << glGetString(GL_VENDOR) << endl <<
+    "renderer: " << glGetString(GL_RENDERER) << endl;
 
     ofDirectory dir;
     dir.allowExt("mov");
@@ -39,7 +41,7 @@ void ofApp::setup(){
     ambientSound.play();
     
     
-    ofSetWindowShape(STAGE_WIDTH, STAGE_HEIGHT);
+    windowResized(ofGetWidth(), ofGetHeight());
     
     ofDisableArbTex();
     
@@ -47,15 +49,21 @@ void ofApp::setup(){
     
     for (int i=0;i<CAMERAS_NUMBER;i++) {
         cam[i].params.setName("cam"+ofToString(i));
+#if (CAMERAS_NUMBER==2)
+        cam[i].params.add(cam[i].index.set("index",i,0,CAMERAS_NUMBER-1));
+#else
+        cam[i].index = 0;
+#endif
+        
         cam[i].params.add(cam[i].minEdge0.set("minEdge0", 0.0, 0.0, 1.0));
         cam[i].params.add(cam[i].maxEdge0.set("maxEdge0", 1.0, 0.0, 1.0));
         cam[i].params.add(cam[i].minEdge1.set("minEdge1", 0.0, 0.0, 2.0));
-        cam[i].params.add(cam[i].maxEdge1.set("maxEdge1", 2.0, 0.0, 2.0));
+        cam[i].params.add(cam[i].maxEdge1.set("maxEdge1", 3.0, 0.0, 3.0));
         cam[i].params.add(cam[i].offset.set("offset",ofVec3f(0.0),ofVec3f(0.0),ofVec3f(1.0)));
         cam[i].color = colors[i];
         
         ofFile fileRead(cam[i].params.getName()+".txt");
-        fileRead >> cam[0].mat;
+        fileRead >> cam[i].mat;
     }
     
     
@@ -64,25 +72,30 @@ void ofApp::setup(){
     
     gui.setup("panel");
     gui.add(fps.set("fps",""));
-    gui.add(ambLevel.set("ambLevel", 0.5, 0.0, 1.0));
-    gui.add(recLevel.set("recLevel", 0.5, 0.0, 1.0));
-    gui.add(pointSize.set("pointSize",3,1,10));
+    
     gui.add(camZPos.set("camZPos",-0.01,-10,10));
-    gui.add(depthScale.set("depthScale", 0, -5.0, 5.0)); // 10^-5
+    gui.add(pointSize.set("pointSize",1,1,5));
+    
+    gui.add(tolerance.set("tolerance", 0.1, 0.0, 1.0));
+    //gui.add(depthScale.set("depthScale", 0, -5.0, 5.0)); // 10^-5
 
     for (int i=0;i<CAMERAS_NUMBER;i++) {
         gui.add(cam[i].params);
     }
     
-    gui.add(tolerance.set("tolerance", 0.1, 0.0, 1.0));
-    gui.add(decay0.set("decay0", 0.9, 0.9, 1.0));
-    gui.add(decay1.set("decay1", 0.9, 0.9, 1.0));
-    gui.add(strobeRate.set("strobeRate", 15, 1, 30));
-    gui.add(variance.set("variance", .143,0,10));
-    gui.add(radius.set("radius", 7,0,20)); // fps drop above 14
-    gui.add(hueRate.set("hueRate", 0.0,0.0,1.0));
-    gui.add(sat.set("sat", 0.0,0.0,1.0));
-    gui.add(offset.set("offset", 0.0,-0.5,0.5));
+    
+    
+    
+    visualParams.setName("visual");
+    visualParams.add(decay0.set("decay0", 0.9, 0.9, 1.0));
+    visualParams.add(decay1.set("decay1", 0.9, 0.9, 1.0));
+    visualParams.add(strobeRate.set("strobeRate", 15, 1, 30));
+    visualParams.add(variance.set("variance", .143,0,10));
+    visualParams.add(radius.set("radius", 7,0,20)); // fps drop above 14
+    visualParams.add(hueRate.set("hueRate", 0.0,0.0,1.0));
+    visualParams.add(sat.set("sat", 0.0,0.0,1.0));
+    visualParams.add(offset.set("offset", 0.0,-0.5,0.5));
+    gui.add(visualParams);
     
     levels.setName("levels");
     levels.add(inputBlack.set("inputBlack",0,0,1));
@@ -92,21 +105,29 @@ void ofApp::setup(){
     levels.add(outputWhite.set("outputWhite",1,0,1));
     gui.add(levels);
     
-    blobParams.setName("blobs");
-    blobParams.add(minArea.set("minArea",0.05,0,0.1));
-    blobParams.add(maxArea.set("maxArea", 0.5, 0, 1));
-    blobParams.add(blobDetection.set("blobDetection",false));
-    gui.add(blobParams);
+    detectionParams.setName("detection");
+    detectionParams.add(blobPointSize.set("blobPointSize",3,1,5));
+    detectionParams.add(minArea.set("minArea",0.05,0,0.1));
+    detectionParams.add(maxArea.set("maxArea", 0.5, 0, 1));
+    detectionParams.add(blobDetection.set("blobDetection",false));
+    gui.add(detectionParams);
     
-    gui.add(recordTime.set("recordTime",""));
-    gui.add(waitTime.set("waitTime",""));
-    gui.add(recordDuration.set("recordDuration",10,10,30));
-    gui.add(minimumDuration.set("minimumDuration",3,0,5));
+    timerParams.setName("timer");
+    timerParams.add(recordTime.set("recordTime",""));
+    timerParams.add(waitTime.set("waitTime",""));
+    timerParams.add(recordDuration.set("recordDuration",10,10,30));
+    timerParams.add(minimumDuration.set("minimumDuration",3,0,5));
 //    gui.add(freezeDuration.set("freezeDuration",3,0,5));
-    gui.add(waitDuration.set("waitDuration",2,0,10));
-    gui.add(idleInterval.set("idleInterval",5,2,10));
+    timerParams.add(waitDuration.set("waitDuration",2,0,10));
+    timerParams.add(idleInterval.set("idleInterval",5,2,10));
+    timerParams.add(videoQueue.set("videoQueue",""));
+    gui.add(timerParams);
     
-    gui.add(videoQueue.set("videoQueue",""));
+    gui.add(fadeIn.set("fadeIn", 0.5, 0, 2));
+    gui.add(fadeOut.set("fadeOut", 1.5, 0, 2));
+    gui.add(ambLevel.set("ambLevel", 0.5, 0.0, 1.0));
+    gui.add(recLevel.set("recLevel", 0.5, 0.0, 1.0));
+    
     gui.loadFromFile("settings.xml");
     
     virtualCam.lookAt(ofVec3f(0,0,1),ofVec3f(0,1,0));
@@ -114,14 +135,17 @@ void ofApp::setup(){
     //virtualCam.setPosition(0,0,-0.01);
     virtualCam.setNearClip(0.001);
     
-    recorder.setPixelFormat("gray");
+    //recorder.setPixelFormat("gray");
     
 #ifdef TARGET_OSX
     recorder.setVideoCodec("mpeg4");
-    recorder.setVideoBitrate("800k");
+    recorder.setVideoBitrate("5000k");
 #else
     recorder.setFfmpegLocation("avconv");
 #endif
+    
+    
+    
     ofxOpenNI2::init();
     vector<string> devices = ofxOpenNI2::listDevices();
     
@@ -130,13 +154,17 @@ void ofApp::setup(){
 //    }
     
     for (int i=0;i<CAMERAS_NUMBER;i++) {
-        cam[i].sensor.setup(devices[i]);
-        cam[i].sensor.setDepthMode(5);
-        cam[i].background.allocate(cam[i].sensor.depthMode.width, cam[i].sensor.depthMode.height, 1);
+        sensor &s(sensors[i]);
+        s.cam.setup(devices[i]);
+        s.cam.setDepthMode(5);
+        s.background.allocate(s.cam.depthMode.width, s.cam.depthMode.height, 1);
     }
     
     
     createCloudShader(cloudShader);
+    cloudShader.begin();
+    cloudShader.setUniform1f("scale",DEPTH_SCALE);
+    cloudShader.end();
     
     ofFbo::Settings s;
     s.width = STAGE_WIDTH;
@@ -144,12 +172,12 @@ void ofApp::setup(){
     s.internalformat = GL_R16; // GL_R8 is not used in ofGetImageTypeFromGLType()
     
     depthFbo.allocate(s);
+    blobFbo.allocate(s);
     camFbo.allocate(s);
     camFbo.begin();
     ofClear(0);
     camFbo.end();
     
-
     
     string fragment = STRINGIFY(
                                 \n#version 150\n
@@ -199,6 +227,9 @@ void ofApp::setup(){
     
     ping.allocate(depthFbo.getWidth(),depthFbo.getHeight());
     pong.allocate(depthFbo.getWidth(),depthFbo.getHeight());
+    
+    recorderFbo.allocate(depthFbo.getWidth(),depthFbo.getHeight(),GL_RGB);
+    
     
     for (int i=0;i<LAYERS_NUMBER;i++) {
         layer l;
@@ -304,13 +335,13 @@ void ofApp::setup(){
     
     ofSetColor(255);
     
-    state = STATE_VISUAL; //STATE_IDLE
-    bShowGui = true;
+    state = STATE_IDLE; //
+    bShowGui = false;
     ofHideCursor();
     bShowMouse = false;
     bFirstIdle = false;
-    bCaptureBg = false;
-    bUseBg = false;
+    bCaptureBg = true;
+    bUseBg = true;
     
     warper.setup();
     warper.load();
@@ -322,9 +353,10 @@ void ofApp::updateMesh(camera &cam) {
     
     cam.mesh.clear();
     cam.mesh.setMode(OF_PRIMITIVE_POINTS);
+    sensor &s(sensors[cam.index]);
     
-    int rows=cam.sensor.depthMode.height;
-    int columns=cam.sensor.depthMode.width;
+    int rows=s.cam.depthMode.height;
+    int columns=s.cam.depthMode.width;
     
     int minE = cam.minEdge0*USHRT_MAX;
     int maxE = cam.maxEdge0*USHRT_MAX;
@@ -332,20 +364,20 @@ void ofApp::updateMesh(camera &cam) {
 
     for(int iy = 0; iy < rows; iy++) {
         for(int ix = 0; ix < columns; ix++) {
-            short unsigned int ref = cam.background.getPixels()[iy*columns+ix];
-            short unsigned int depth = cam.sensor.getDepth()[iy*columns+ix];
+            short unsigned int ref = s.background.getPixels()[iy*columns+ix];
+            short unsigned int depth = s.cam.getDepth()[iy*columns+ix];
             if (state == STATE_BACKGROUND) {
                 if (ref && ref> minE && ref<maxE) {
-                    cam.mesh.addVertex(cam.sensor.getWorldCoordinateAlt(ix, iy, ref));
+                    cam.mesh.addVertex(s.cam.getWorldCoordinateAlt(ix,iy, ref));
                 }
             } else {
                 if (bUseBg) {
                     if (depth && abs((int)depth-(int)ref)>toler && depth> minE && depth<maxE) {
-                        cam.mesh.addVertex(cam.sensor.getWorldCoordinateAlt(ix, iy, depth));
+                        cam.mesh.addVertex(s.cam.getWorldCoordinateAlt(ix,iy, depth));
                     }
                 } else {
                     if (depth && depth> minE && depth<maxE) {
-                        cam.mesh.addVertex(cam.sensor.getWorldCoordinateAlt(ix, iy, depth));
+                        cam.mesh.addVertex(s.cam.getWorldCoordinateAlt(ix,iy, depth));
                     }
                 }
             }
@@ -399,7 +431,7 @@ void ofApp::updateLayer(layer &l,ofFbo &depth,float decay) {
 }
 
 
-void ofApp::renderCam(camera &cam) {
+void ofApp::renderCam(camera &cam,int pointSize) {
     ofPushMatrix();
     glPointSize(pointSize);
     ofEnableDepthTest();
@@ -417,27 +449,28 @@ void ofApp::update(){
     fps = ofToString(ofGetFrameRate());
     
     for (int i=0;i<CAMERAS_NUMBER;i++) {
-        cam[i].sensor.update();
+        sensors[i].cam.update();
     }
     
-    bool bNewFrame = cam[0].sensor.bNewDepth;
+    bool bNewFrame = sensors[0].cam.bNewDepth;
 #if (CAMERAS_NUMBER==2)
-    bNewFrame = bNewFrame && cam[1].sensor.bNewDepth;
+    bNewFrame = bNewFrame && sensors[1].cam.bNewDepth;
 #endif
         
     if (bNewFrame) {
         if (bCaptureBg) {
             bCaptureBg = false;
             for (int i=0;i<CAMERAS_NUMBER;i++) {
-                cam[i].background.setFromPixels(cam[i].sensor.getDepth(), cam[i].sensor.depthMode.width, cam[i].sensor.depthMode.height, 1);
+                sensor &s(sensors[i]);
+                s.background.setFromPixels(s.cam.getDepth(), s.cam.depthMode.width, s.cam.depthMode.height, 1);
             }
         }
         
-        depthFbo.begin();
+        blobFbo.begin();
         virtualCam.begin();
         ofClear(0);
         cloudShader.begin();
-        cloudShader.setUniform1f("scale",pow(10,depthScale));
+        
         
         for (int i=0; i<CAMERAS_NUMBER; i++) {
             updateMesh(cam[i]);
@@ -446,7 +479,44 @@ void ofApp::update(){
             ofPushMatrix();
             ofTranslate(cam[i].offset);
             ofMultMatrix(cam[i].mat);
-            renderCam(cam[i]);
+            renderCam(cam[i],blobPointSize);
+            ofPopMatrix();
+            
+        }
+        cloudShader.end();
+        virtualCam.end();
+        blobFbo.end();
+        
+        ofPixels pixels;
+        blobFbo.readToPixels(pixels);
+        grayImg.setFromPixels(pixels);
+        
+        float size = grayImg.getWidth()*grayImg.getHeight();
+        contour.findContours(grayImg, minArea*size, maxArea*size, 10, false);
+        
+        blobDetection = contour.nBlobs && contour.blobs[0].area>=minArea;
+        
+        if (blobDetection) {
+            waitTimer = ofGetElapsedTimef()+ waitDuration;
+        }
+        
+        recordTime ="";
+        waitTime="";
+        
+        depthFbo.begin();
+        virtualCam.begin();
+        ofClear(0);
+        cloudShader.begin();
+
+        
+        for (int i=0; i<CAMERAS_NUMBER; i++) {
+            updateMesh(cam[i]);
+            cloudShader.setUniform1f("minEdge", cam[i].minEdge1);
+            cloudShader.setUniform1f("maxEdge",cam[i].maxEdge1);
+            ofPushMatrix();
+            ofTranslate(cam[i].offset);
+            ofMultMatrix(cam[i].mat);
+            renderCam(cam[i],pointSize);
             ofPopMatrix();
             
         }
@@ -461,21 +531,7 @@ void ofApp::update(){
 //        subtractShader.end();
 //        blobFbo.end();
         
-        ofPixels pixels;
-        depthFbo.readToPixels(pixels);
-        grayImg.setFromPixels(pixels);
         
-        float size = grayImg.getWidth()*grayImg.getHeight();
-        contour.findContours(grayImg, minArea*size, maxArea*size, 10, false);
-        
-        blobDetection = contour.nBlobs && contour.blobs[0].area>=minArea;
-        
-        if (blobDetection) {
-            waitTimer = ofGetElapsedTimef()+ waitDuration;
-        }
-        
-        recordTime ="";
-        waitTime="";
 
         
         switch (state) {
@@ -530,11 +586,16 @@ void ofApp::update(){
                 
                 updateLayer(camLayer,camFbo,decay0);
                 
+                recorderFbo.begin();
+                ofClear(0);
+                camLayer.fbo.draw(0, 0);
+                recorderFbo.end();
+                ofPixels recordPixel;
+                recorderFbo.readToPixels(recordPixel);
+            
+                recorder.addFrame(recordPixel);
                 
                 
-                recorder.addFrame(pixels);
-                
-                videoQueue = ofToString(recorder.getVideoQueueSize());
                 if (ofGetElapsedTimef()>recordTimer || ofGetElapsedTimef()>waitTimer) {
                     recorder.close();
                     
@@ -567,7 +628,7 @@ void ofApp::update(){
                 break;
         }
         
-        
+        videoQueue = ofToString(recorder.getVideoQueueSize());
         frameNum++;
         
     }
@@ -619,29 +680,27 @@ void ofApp::update(){
     
     if (state==STATE_IDLE || state == STATE_RECORD) {
         for (int i=0;i<LAYERS_NUMBER;i++) {
+            layers[i].fbo.begin();
+            ofClear(0);
             
             if (players[i].isLoaded() && !players[i].isPaused()) {
-                depthFbo.begin();
+                float inPos = fadeIn/players[i].getDuration();
+                float outPos = 1-fadeOut/players[i].getDuration();
+                //cout <<players[i].getPosition() << '\t' << inPos << '\t' << outPos << endl;
+                float alpha = ofMap(players[i].getPosition(), 0, inPos, 0, 1,true)-ofMap(players[i].getPosition(), outPos, 1, 0, 1,true);
+                ofSetColor(alpha*255);
                 players[i].draw(0, 0);
-                depthFbo.end();
-                updateLayer(layers[i], depthFbo,decay0);
-                
-            } else {
-                depthFbo.begin();
-                ofClear(0);
-                depthFbo.end();
-                updateLayer(layers[i], depthFbo,decay1);
             }
-            
-            
-            
+            layers[i].fbo.end();
         }
+        
+        ofSetColor(255);
         
         compFbo.begin();
         compShader.begin();
-//        for (int i=0; i<layers.size();i++) {
-//            compShader.setUniformTexture("tex"+ofToString(i+1), layers[i].fbo.getTextureReference(), i+3);
-//        }
+        for (int i=0; i<layers.size();i++) {
+            compShader.setUniformTexture("tex"+ofToString(i+1), layers[i].fbo.getTextureReference(), i+3);
+        }
         camLayer.fbo.draw(0, 0);
         compShader.end();
         compFbo.end();
@@ -658,24 +717,20 @@ void ofApp::draw(){
     ofBackground(0);
     ofSetColor(255);
    
-    ofPushMatrix();
-    if (bEnableWarper) {
-        ofMultMatrix(warper.getMatrix());
-        
-    }
+    
     
     switch (state) {
         case STATE_PICKING:
             virtualCam.begin();
             for (int i=0; i<CAMERAS_NUMBER; i++) {
                 ofSetColor(cam[i].color);
-                renderCam(cam[i]);
+                renderCam(cam[i],pointSize);
             }
             virtualCam.end();
-            
+            ofSetColor(255);
             break;
-            
-        case STATE_CALIBRATION:
+        case STATE_CAMERA:
+        case STATE_EDGES:
         case STATE_BACKGROUND:
             virtualCam.begin();
             for (int i=0; i<CAMERAS_NUMBER; i++) {
@@ -683,14 +738,14 @@ void ofApp::draw(){
                 ofPushMatrix();
                 ofTranslate(cam[i].offset);
                 ofMultMatrix(cam[i].mat);
-                renderCam(cam[i]);
+                renderCam(cam[i],pointSize);
                 ofPopMatrix();
             }
             virtualCam.end();
             ofSetColor(255);
             break;
-        case STATE_BLOB:
-            depthFbo.draw(0, 0);
+        case STATE_DETECTION:
+            blobFbo.draw(0, 0);
             for (int i = 0; i < contour.nBlobs; i++){
                 contour.blobs[i].draw(0,0);
             }
@@ -699,20 +754,30 @@ void ofApp::draw(){
         
         
         case STATE_VISUAL:
+            ofPushMatrix();
+            if (bEnableWarper) {
+                ofMultMatrix(warper.getMatrix());
+                
+            }
+            ofMultMatrix(mat);
             camLayer.fbo.draw(0, 0);
+            ofPopMatrix();
             break;
         default:
-            
+            ofPushMatrix();
+            if (bEnableWarper) {
+                ofMultMatrix(warper.getMatrix());
+                
+            }
+            ofMultMatrix(mat);
             compFbo.draw(0, 0);
+            ofPopMatrix();
             break;
     }
     
     
     
-//    ofPopMatrix();
-    if (bShowGui) {
-        gui.draw();
-    }
+
     
     
     
@@ -764,13 +829,17 @@ void ofApp::draw(){
         }
         ofSetLineWidth(1);
     }
-    ofPopMatrix();
+    
     warper.draw();
+    
+    if (bShowGui) {
+        gui.draw();
+    }
 }
 
 void ofApp::exit() {
     for (int i=0;i<CAMERAS_NUMBER;i++) {
-        cam[i].sensor.exit();
+        sensors[i].cam.exit();
     }
     for (vector<ofVideoPlayer>::iterator iter=players.begin();iter!=players.end();iter++) {
         iter->close();
@@ -778,21 +847,21 @@ void ofApp::exit() {
     
 }
 
-void ofApp::saveScreenMatrix(int index,bool bInverse) {
+void ofApp::saveScreenMatrix(camera &cam) {
     
-    camera &thecam = cam[index];
-    ofVec3f origin = thecam.markers[0];
-    ofVec3f vecX = 2*(origin-thecam.markers[1]);
-    ofVec3f vecY = origin-thecam.markers[2];
     
-    ofVec3f lookAtDir = (vecX.cross(vecY)).normalize()*(bInverse ? -1 : 1);
+    ofVec3f origin = cam.markers[0];
+    ofVec3f vecX = 2*(origin-cam.markers[1])*(cam.bFlipX ? -1 : 1);
+    ofVec3f vecY = origin-cam.markers[2]*(cam.bFlipY ? -1 : 1);
+    
+    ofVec3f lookAtDir = (vecX.cross(vecY)).normalize()*(cam.bFlipZ ? -1 : 1);
     
     cout << lookAtDir << endl;
-    ofVec3f center = thecam.markers[1]-0.5*vecY;
-    thecam.mat.makeLookAtViewMatrix(center, center+lookAtDir, vecY);
+    ofVec3f center = cam.markers[1]-0.5*vecY;
+    cam.mat.makeLookAtViewMatrix(center, center+lookAtDir, vecY);
     
-    ofFile fileWrite(thecam.params.getName()+".txt",ofFile::WriteOnly);
-    fileWrite << thecam.mat;
+    ofFile fileWrite(cam.params.getName()+".txt",ofFile::WriteOnly);
+    fileWrite << cam.mat;
     
     
 }
@@ -800,108 +869,139 @@ void ofApp::saveScreenMatrix(int index,bool bInverse) {
     
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
-    switch (key) {
-        case ' ':
-            bShowGui=!bShowGui;
-            break;
-        case 'm':
-            bShowMouse=!bShowMouse;
-            if (bShowMouse) {
-                ofShowCursor();
-            } else {
-                ofHideCursor();
-            }
-            break;
-        case '1':
-        case '2':
-        case '3':
-            if (cam[0].markers.empty()) {
-                cam[0].markers.assign(3, ofVec3f(0));
-            }
-            cam[0].markers[key-'1'] = cam[0].tempMarker;
-            break;
-        case '4':
-        case '5':
-            if (!cam[0].markers.empty()) {
-                saveScreenMatrix(0,key=='4');
-            }
-            break;
-        case '6':
-        case '7':
-        case '8':
-            if (cam[1].markers.empty()) {
-                cam[1].markers.assign(3, ofVec3f(0));
-            }
-            cam[1].markers[key-'6'] = cam[1].tempMarker;
-            break;
-        case '9':
-        case '0':
-            if (!cam[1].markers.empty()) {
-                saveScreenMatrix(1,key=='9');
-            }
-            break;
-        case 'r':
-            cam[0].markers.clear();
-            cam[1].markers.clear();
-            break;
-        case 'b':
-            state = STATE_BLOB;
-            break;
-        case 'p':
-            state = STATE_PICKING;
-            break;
-        case 'g':
-            state = STATE_BACKGROUND;
-            
-            break;
-        case 'c':
-            state = STATE_CALIBRATION;
-            break;
+    
+    if (ofGetMousePressed(OF_MOUSE_BUTTON_LEFT) || ofGetMousePressed(OF_MOUSE_BUTTON_RIGHT)) {
+        int index = ofGetMousePressed(OF_MOUSE_BUTTON_LEFT) ? 0 : 1;
         
-        case 'v':
-            state = STATE_VISUAL;
-            break;
+        switch (key) {
+            case '1':
+            case '2':
+            case '3':
+                
+                if (cam[index].markers.empty()) {
+                    cam[index].markers.assign(3, ofVec3f(0));
+                }
+                cam[index].markers[key-'1'] = cam[index].tempMarker;
+                break;
             
-        case 'i':
-            state = STATE_IDLE;
+            case 'm':
+                if (!cam[index].markers.empty()) {
+                    saveScreenMatrix(cam[index]);
+                }
+                break;
+            case 'c':
+                //cam[index].markers.clear();
+                
+                break;
+            case 'x':
+                cam[index].bFlipX=!cam[index].bFlipX;
+                if (!cam[index].markers.empty()) {
+                    saveScreenMatrix(cam[index]);
+                }
+                break;
+            case 'y':
+                cam[index].bFlipY=!cam[index].bFlipY;
+                if (!cam[index].markers.empty()) {
+                    saveScreenMatrix(cam[index]);
+                }
+                break;
+            case 'z':
+                cam[index].bFlipZ=!cam[index].bFlipZ;
+                if (!cam[index].markers.empty()) {
+                    saveScreenMatrix(cam[index]);
+                }
+                break;
+                
+            default:
+                break;
+        }
+    }
+    
+    if (ofGetMousePressed()) {
+        switch (key) {
+            case 'g':
+                bCaptureBg = true;
+                break;
+            case 'b':
+                createBlurShader(blurShader, radius, variance);
+                break;
+            case 's':
+                warper.save();
+                break;
+            case 'w': {
+                
+                int w = STAGE_WIDTH;
+                int h = STAGE_HEIGHT;
+                int x = (ofGetWidth() - w) * 0.5;       // center on screen.
+                int y = (ofGetHeight() - h) * 0.5;     // center on screen.
+                
+                
+                warper.setSourceRect(ofRectangle(x, y, w,h ));              // this is the source rectangle which is the size of the image and located at ( 0, 0 )
+                warper.setTopLeftCornerPosition(ofPoint(x, y));             // this is position of the quad warp corners, centering the image on the screen.
+                warper.setTopRightCornerPosition(ofPoint(x + w, y));        // this is position of the quad warp corners, centering the image on the screen.
+                warper.setBottomLeftCornerPosition(ofPoint(x, y + h));      // this is position of the quad warp corners, centering the image on the screen.
+                warper.setBottomRightCornerPosition(ofPoint(x + w, y + h)); // this is position of the quad warp corners, centering the image on the screen.
+            }  break;
+            default:
+                break;
+        }
+    } else {
+    
+        switch (key) {
+            case ' ':
+                bShowGui=!bShowGui;
+                break;
+            case 'm':
+                bShowMouse=!bShowMouse;
+                if (bShowMouse) {
+                    ofShowCursor();
+                } else {
+                    ofHideCursor();
+                }
+                break;
             
-            break;
-            
-        case 't':
-            ofToggleFullscreen();
-            break;
-            
-        case 'u':
-            createBlurShader(blurShader, radius, variance);
-            break;
-            
-        case 's':
-            bCaptureBg = true;
-           
-            break;
-        case 'w':
-            bEnableWarper =!bEnableWarper;
-            break;
-        case 'a':
-            warper.toggleShow();
-            warper.save();
-            break;
-        case 'z': {
-            
-            int x = (ofGetWidth() - STAGE_WIDTH) * 0.5;       // center on screen.
-            int y = (ofGetHeight() - STAGE_HEIGHT) * 0.5;     // center on screen.
-            int sw = STAGE_WIDTH;
-            int sh = STAGE_HEIGHT;
-            
-            warper.setSourceRect(ofRectangle(0, 0, sw, sh));              // this is the source rectangle which is the size of the image and located at ( 0, 0 )
-            warper.setTopLeftCornerPosition(ofPoint(x, y));             // this is position of the quad warp corners, centering the image on the screen.
-            warper.setTopRightCornerPosition(ofPoint(x + sw, y));        // this is position of the quad warp corners, centering the image on the screen.
-            warper.setBottomLeftCornerPosition(ofPoint(x, y + sh));      // this is position of the quad warp corners, centering the image on the screen.
-            warper.setBottomRightCornerPosition(ofPoint(x + sw, y + sh)); // this is position of the quad warp corners, centering the image on the screen.
-        }  break;
-        
-        default:
-            break;
+            case 'b':
+                bUseBg = !bUseBg;
+                break;
+            case 'd':
+                state = STATE_DETECTION;
+                break;
+            case 'p':
+                state = STATE_PICKING;
+                break;
+            case 'g':
+                state = STATE_BACKGROUND;
+                break;
+            case 'c':
+                state = STATE_CAMERA;
+                break;
+            case 'e':
+                state = STATE_EDGES;
+                break;
+            case 'v':
+                state = STATE_VISUAL;
+                break;
+            case 'i':
+                state = STATE_IDLE;
+                break;
+#if (CAMERAS_NUMBER==2)
+            case 'f':
+                cam[0].index = cam[1].index;
+                cam[1].index = 1-cam[0].index;
+                break;
+#endif
+            case 't':
+                ofToggleFullscreen();
+                break;
+            case 'w':
+                bEnableWarper =!bEnableWarper;
+                break;
+            case 'q':
+                warper.toggleShow();
+                break;
+            default:
+                break;
+        }
     }
 }
 
@@ -917,12 +1017,8 @@ void ofApp::mouseMoved(int x, int y ){
 
 //--------------------------------------------------------------
 void ofApp::mouseDragged(int x, int y, int button){
-    if (state==STATE_CALIBRATION) {
+    if (state==STATE_CAMERA) {
         switch (button) {
-            case OF_MOUSE_BUTTON_MIDDLE:
-                virtualCam.setPosition(ofVec3f(0,0,downCamZPos+(downPos.y-y)/ofGetHeight()));
-                camZPos = virtualCam.getPosition().z;
-                break;
             case OF_MOUSE_BUTTON_LEFT:
                 cam[0].offset = cam[0].downOffset+(downPos-ofVec2f(x,y))/ofGetHeight();
                 break;
@@ -937,6 +1033,15 @@ void ofApp::mouseDragged(int x, int y, int button){
                 break;
         }
     }
+    
+    if ((state==STATE_CAMERA || state==STATE_PICKING) && button==OF_MOUSE_BUTTON_MIDDLE) {
+        virtualCam.setPosition(ofVec3f(0,0,downCamZPos+(downPos.y-y)/ofGetHeight()));
+        camZPos = virtualCam.getPosition().z;
+    }
+
+    
+    
+   
 }
 
 //--------------------------------------------------------------

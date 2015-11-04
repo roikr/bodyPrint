@@ -7,18 +7,26 @@
 #include "ofxOpenCv.h"
 #include "ofxQuadWarp.h"
 
+
+#define CAMERAS_NUMBER 2
+
 struct layer {
     ofFbo fbo;
     float hueOffset;
 };
 
+struct sensor {
+    ofxOpenNI2 cam;
+    ofShortPixels background;
+};
+
 struct camera {
-    ofxOpenNI2 sensor;
+    ofParameter<int>index;
     ofParameter<float>minEdge0,maxEdge0,minEdge1,maxEdge1;
     ofMatrix4x4 mat;
     ofVboMesh mesh;
     ofParameterGroup params;
-    ofShortPixels background;
+    
     
     ofVec3f tempMarker;
     vector<ofVec3f> markers;
@@ -26,6 +34,10 @@ struct camera {
     ofVec3f downOffset;
     
     ofColor color;
+    
+    bool bFlipX;
+    bool bFlipY;
+    bool bFlipZ;
 };
 
 class ofApp : public ofBaseApp{
@@ -47,17 +59,17 @@ class ofApp : public ofBaseApp{
 		void gotMessage(ofMessage msg);
     
         void updateMesh(camera &cam);
-        void renderCam(camera &cam);
+        void renderCam(camera &cam,int pointSize);
         void updateLayer(layer &l,ofFbo &depth,float decay);
         void captureBackground();
     
-        void saveScreenMatrix(int index,bool bInverse);
+        void saveScreenMatrix(camera &cam);
     
-    
-    camera cam[2];
+    sensor sensors[CAMERAS_NUMBER];
+    camera cam[CAMERAS_NUMBER];
     
     ofParameter<int> pointSize;
-    ofParameter<float>depthScale;
+    //ofParameter<float>depthScale;
     ofShader cloudShader;
     ofFbo depthFbo;
     
@@ -72,7 +84,7 @@ class ofApp : public ofBaseApp{
     ofFbo camFbo; // duplicate depthFbo for freeze and fade
     
     
-    
+    ofParameterGroup visualParams;
     ofShader strobeShader;
     ofFbo ping,pong;
     ofParameter<float> decay0,decay1,sat,hueRate,offset;
@@ -95,12 +107,17 @@ class ofApp : public ofBaseApp{
     ofxCvGrayscaleImage grayImg;
     ofxCvContourFinder contour;
     
-    ofParameterGroup blobParams;
+    ofParameterGroup detectionParams;
+    ofParameter<int> blobPointSize;
     ofParameter<float> minArea,maxArea;
     ofParameter<bool>blobDetection;
     
-    ofxVideoRecorder recorder;
+    ofFbo blobFbo;
     
+    ofxVideoRecorder recorder;
+    ofFbo recorderFbo;
+    
+    ofParameterGroup timerParams;
     float startTime;
     ofParameter<string> videoQueue;
     ofParameter<float> recordDuration,waitDuration,idleInterval,minimumDuration;
@@ -110,7 +127,7 @@ class ofApp : public ofBaseApp{
     
     vector<string> memories;
     vector<ofVideoPlayer> players;
-    
+    ofParameter<float> fadeIn,fadeOut;
     
     ofParameter<string> fps;
     ofxPanel gui;
