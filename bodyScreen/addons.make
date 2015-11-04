@@ -3,3 +3,4 @@ ofxOpenCv
 ofxOpenNI2
 ofxShaders
 ofxVideoRecorder
+ofxQuadWarp
